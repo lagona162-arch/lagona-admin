@@ -64,7 +64,7 @@ class MerchantModel {
       verified: json['verified'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
       previewImage: json['preview_image'] as String?,
-      rating: json['rating'] as int?,
+      rating: json['rating'] != null ? (json['rating'] as num).toInt() : null,
       status: json['status'] as String?,
       slogan: json['slogan'] as String?,
       accessStatus: json['access_status'] as String? ?? 'pending',

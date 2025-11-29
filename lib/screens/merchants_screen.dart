@@ -20,8 +20,23 @@ class _MerchantsScreenState extends State<MerchantsScreen> {
   @override
   void initState() {
     super.initState();
+    _loadData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null && route.isCurrent) {
+      _loadData();
+    }
+  }
+
+  void _loadData() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdminProvider>().loadMerchants();
+      if (mounted) {
+        context.read<AdminProvider>().loadMerchants(forceRefresh: true);
+      }
     });
   }
 

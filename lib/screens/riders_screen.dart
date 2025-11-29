@@ -20,8 +20,23 @@ class _RidersScreenState extends State<RidersScreen> {
   @override
   void initState() {
     super.initState();
+    _loadData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null && route.isCurrent) {
+      _loadData();
+    }
+  }
+
+  void _loadData() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdminProvider>().loadRiders();
+      if (mounted) {
+        context.read<AdminProvider>().loadRiders(forceRefresh: true);
+      }
     });
   }
 

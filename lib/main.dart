@@ -14,6 +14,7 @@ import 'screens/transactions_screen.dart';
 import 'screens/deliveries_screen.dart';
 import 'screens/commission_settings_screen.dart';
 import 'screens/topups_screen.dart';
+import 'screens/hub_station_registration_screen.dart';
 
 
 void main() async {
@@ -118,6 +119,11 @@ final GoRouter _router = GoRouter(
           path: '/topups',
           name: 'topups',
           builder: (context, state) => const TopupsScreen(),
+        ),
+        GoRoute(
+          path: '/hub-station-registration',
+          name: 'hub-station-registration',
+          builder: (context, state) => const HubStationRegistrationScreen(),
         ),
       ],
     ),
@@ -225,20 +231,9 @@ class _MainLayoutState extends State<MainLayout> {
       body: isMobile
           ? Container(
               color: AppColors.background,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 150),
-                switchInCurve: Curves.easeOut,
-                switchOutCurve: Curves.easeIn,
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: child,
-                  );
-                },
-                child: KeyedSubtree(
-                  key: ValueKey(widget.currentPath),
-                  child: widget.child,
-                ),
+              child: KeyedSubtree(
+                key: ValueKey(widget.currentPath),
+                child: widget.child,
               ),
             )
           : Row(
@@ -274,16 +269,16 @@ class _MainLayoutState extends State<MainLayout> {
                                 child: FittedBox(
                                   fit: BoxFit.scaleDown,
                                   child: IconButton(
-                                    icon: Icon(
-                                      _isDrawerExpanded ? Icons.menu_open : Icons.menu,
-                                      color: AppColors.textWhite,
+                                icon: Icon(
+                                  _isDrawerExpanded ? Icons.menu_open : Icons.menu,
+                                  color: AppColors.textWhite,
                                       size: 20,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _isDrawerExpanded = !_isDrawerExpanded;
-                                      });
-                                    },
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _isDrawerExpanded = !_isDrawerExpanded;
+                                  });
+                                },
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                     visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
@@ -364,6 +359,13 @@ class _MainLayoutState extends State<MainLayout> {
                                 context: context,
                                 isExpanded: _isDrawerExpanded,
                               ),
+                              _buildNavItem(
+                                icon: Icons.add_business,
+                                label: 'Register Hub/Station',
+                                path: '/hub-station-registration',
+                                context: context,
+                                isExpanded: _isDrawerExpanded,
+                              ),
                             ],
                           ),
                         ),
@@ -388,20 +390,9 @@ class _MainLayoutState extends State<MainLayout> {
                 Expanded(
                   child: Container(
                     color: AppColors.background,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 150),
-                      switchInCurve: Curves.easeOut,
-                      switchOutCurve: Curves.easeIn,
-                      transitionBuilder: (child, animation) {
-                        return FadeTransition(
-                          opacity: animation,
-                          child: child,
-                        );
-                      },
-                      child: KeyedSubtree(
-                        key: ValueKey(widget.currentPath),
-                        child: widget.child,
-                      ),
+                    child: KeyedSubtree(
+                      key: ValueKey(widget.currentPath),
+                      child: widget.child,
                     ),
                   ),
                 ),
@@ -512,6 +503,14 @@ class _MainLayoutState extends State<MainLayout> {
               icon: Icons.settings,
               label: 'Commission',
               path: '/commission-settings',
+              context: context,
+              isExpanded: true,
+              isMobile: true,
+            ),
+            _buildNavItem(
+              icon: Icons.add_business,
+              label: 'Register Hub/Station',
+              path: '/hub-station-registration',
               context: context,
               isExpanded: true,
               isMobile: true,

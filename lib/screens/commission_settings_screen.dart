@@ -199,14 +199,14 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: IconButton(
-                  icon: Icon(
-                    Icons.edit,
-                    color: AppColors.primary,
-                    size: isMobile ? 18.0 : 16.0,
-                  ),
-                  onPressed: () => _showEditCommissionDialog(setting),
-                  tooltip: 'Edit',
-                  padding: EdgeInsets.zero,
+              icon: Icon(
+                Icons.edit,
+                color: AppColors.primary,
+                size: isMobile ? 18.0 : 16.0,
+              ),
+              onPressed: () => _showEditCommissionDialog(setting),
+              tooltip: 'Edit',
+              padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(), // remove default 48x48 min size
                   visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
                   splashRadius: isMobile ? 14.0 : 12.0,

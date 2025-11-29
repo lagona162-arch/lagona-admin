@@ -6,6 +6,9 @@ import '../models/transaction_model.dart';
 import '../models/delivery_model.dart';
 import '../models/commission_setting_model.dart';
 import '../models/topup_model.dart';
+import '../models/business_hub_model.dart';
+import '../models/loading_station_model.dart';
+import '../models/topup_request_model.dart';
 import '../services/admin_service.dart';
 
 class AdminProvider extends ChangeNotifier {
@@ -21,6 +24,7 @@ class AdminProvider extends ChangeNotifier {
   List<DeliveryModel> _deliveries = [];
   List<CommissionSettingModel> _commissionSettings = [];
   List<TopupModel> _topups = [];
+  List<TopupRequestModel> _topupRequests = [];
   Map<String, dynamic> _dashboardStats = {};
   Map<String, dynamic> _cashFlowData = {};
 
@@ -44,6 +48,7 @@ class AdminProvider extends ChangeNotifier {
   List<DeliveryModel> get deliveries => _deliveries;
   List<CommissionSettingModel> get commissionSettings => _commissionSettings;
   List<TopupModel> get topups => _topups;
+  List<TopupRequestModel> get topupRequests => _topupRequests;
   Map<String, dynamic> get dashboardStats => _dashboardStats;
   Map<String, dynamic> get cashFlowData => _cashFlowData;
 
@@ -321,6 +326,135 @@ class AdminProvider extends ChangeNotifier {
       _setError(null);
       await _adminService.updateMerchantAccessStatus(merchantId, accessStatus);
       await loadMerchants(forceRefresh: true);
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> createBusinessHub({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String name,
+    required String password,
+  }) async {
+    try {
+      _setLoading(true);
+      _setError(null);
+      final result = await _adminService.createBusinessHub(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        phone: phone,
+        name: name,
+        password: password,
+      );
+      await loadUsers(forceRefresh: true);
+      _setLoading(false);
+      return result;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> createLoadingStation({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String name,
+    required String password,
+    String? bhcode,
+  }) async {
+    try {
+      _setLoading(true);
+      _setError(null);
+      final result = await _adminService.createLoadingStation(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        phone: phone,
+        name: name,
+        password: password,
+        bhcode: bhcode,
+      );
+      await loadUsers(forceRefresh: true);
+      _setLoading(false);
+      return result;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      rethrow;
+    }
+  }
+
+  Future<List<BusinessHubModel>> getAllBusinessHubs({bool forceRefresh = false}) async {
+    try {
+      _setLoading(true);
+      _setError(null);
+      final hubs = await _adminService.getAllBusinessHubs();
+      _setLoading(false);
+      return hubs;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return [];
+    }
+  }
+
+  Future<double?> getCommissionRate(String role) async {
+    try {
+      return await _adminService.getCommissionRate(role);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> loadTopupRequests({String? status, bool forceRefresh = false}) async {
+    try {
+      _setLoading(true);
+      _setError(null);
+      _topupRequests = await _adminService.getTopupRequests(status: status);
+      _setLoading(false);
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+    }
+  }
+
+  Future<bool> approveTopupRequest(String requestId) async {
+    try {
+      _setLoading(true);
+      _setError(null);
+      // Get current admin user ID (you may need to adjust this based on your auth setup)
+      final adminId = 'admin'; // TODO: Replace with actual admin user ID
+      await _adminService.approveTopupRequest(requestId, adminId);
+      await loadTopupRequests(forceRefresh: true);
+      await loadTopups(forceRefresh: true);
+      await loadCashFlowData(forceRefresh: true);
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  Future<bool> rejectTopupRequest(String requestId, {String? reason}) async {
+    try {
+      _setLoading(true);
+      _setError(null);
+      final adminId = 'admin'; // TODO: Replace with actual admin user ID
+      await _adminService.rejectTopupRequest(requestId, adminId, reason: reason);
+      await loadTopupRequests(forceRefresh: true);
       _setLoading(false);
       return true;
     } catch (e) {

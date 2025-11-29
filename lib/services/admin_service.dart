@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:math';
 import '../models/user_model.dart';
 import '../models/merchant_model.dart';
 import '../models/rider_model.dart';
@@ -6,6 +7,9 @@ import '../models/transaction_model.dart';
 import '../models/delivery_model.dart';
 import '../models/commission_setting_model.dart';
 import '../models/topup_model.dart';
+import '../models/business_hub_model.dart';
+import '../models/loading_station_model.dart';
+import '../models/topup_request_model.dart';
 import 'supabase_service.dart';
 
 class AdminService {
@@ -340,6 +344,533 @@ class AdminService {
       };
     } catch (e) {
       throw Exception('Failed to fetch cash flow data: $e');
+    }
+  }
+
+  // Business Hub and Loading Station Management
+  Future<List<BusinessHubModel>> getAllBusinessHubs() async {
+    try {
+      final response = await _client
+          .from('business_hubs')
+          .select('*, users!inner(full_name, email, phone, is_active)')
+          .order('created_at', ascending: false);
+      
+      return (response as List).map((json) {
+        final userData = json['users'];
+        return BusinessHubModel.fromJson({
+          ...json,
+          'full_name': userData['full_name'],
+          'email': userData['email'],
+          'phone': userData['phone'],
+          'is_active': userData['is_active'],
+        });
+      }).toList();
+    } catch (e) {
+      throw Exception('Failed to fetch business hubs: $e');
+    }
+  }
+
+  Future<List<LoadingStationModel>> getAllLoadingStations() async {
+    try {
+      final response = await _client
+          .from('loading_stations')
+          .select('''
+            *,
+            users!inner(full_name, email, phone, is_active),
+            business_hubs(name)
+          ''')
+          .order('created_at', ascending: false);
+      
+      return (response as List).map((json) {
+        final userData = json['users'];
+        final hubData = json['business_hubs'];
+        return LoadingStationModel.fromJson({
+          ...json,
+          'full_name': userData['full_name'],
+          'email': userData['email'],
+          'phone': userData['phone'],
+          'is_active': userData['is_active'],
+          'business_hub_name': hubData?['name'],
+        });
+      }).toList();
+    } catch (e) {
+      throw Exception('Failed to fetch loading stations: $e');
+    }
+  }
+
+  String _generateBHCode() {
+    final random = Random();
+    final letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    final numbers = '0123456789';
+    final code = StringBuffer();
+    
+    // Generate 3 letters
+    for (int i = 0; i < 3; i++) {
+      code.write(letters[random.nextInt(letters.length)]);
+    }
+    
+    // Generate 3 numbers
+    for (int i = 0; i < 3; i++) {
+      code.write(numbers[random.nextInt(numbers.length)]);
+    }
+    
+    return code.toString();
+  }
+
+  String _generateLSCode() {
+    final random = Random();
+    final letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    final numbers = '0123456789';
+    final code = StringBuffer();
+    
+    // Generate 2 letters
+    for (int i = 0; i < 2; i++) {
+      code.write(letters[random.nextInt(letters.length)]);
+    }
+    
+    // Generate 4 numbers
+    for (int i = 0; i < 4; i++) {
+      code.write(numbers[random.nextInt(numbers.length)]);
+    }
+    
+    return code.toString();
+  }
+
+  Future<String> _ensureUniqueBHCode() async {
+    String code;
+    int attempts = 0;
+    do {
+      code = _generateBHCode();
+      final existing = await _client
+          .from('business_hubs')
+          .select('id')
+          .filter('bh_code', 'eq', code)
+          .maybeSingle();
+      
+      if (existing == null) break;
+      attempts++;
+      if (attempts > 100) {
+        throw Exception('Failed to generate unique BHCODE after 100 attempts');
+      }
+    } while (true);
+    
+    return code;
+  }
+
+  Future<String> _ensureUniqueLSCode() async {
+    String code;
+    int attempts = 0;
+    do {
+      code = _generateLSCode();
+      final existing = await _client
+          .from('loading_stations')
+          .select('id')
+          .filter('ls_code', 'eq', code)
+          .maybeSingle();
+      
+      if (existing == null) break;
+      attempts++;
+      if (attempts > 100) {
+        throw Exception('Failed to generate unique LSCODE after 100 attempts');
+      }
+    } while (true);
+    
+    return code;
+  }
+
+  Future<Map<String, dynamic>> createBusinessHub({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String name,
+    required String password,
+  }) async {
+    try {
+      // Combine first and last name
+      final fullName = '$firstName $lastName'.trim();
+
+      // Step 1: Generate unique BHCODE first
+      final bhcode = await _ensureUniqueBHCode();
+
+      // Step 2: Create user account in Supabase Auth
+      // This creates the user in auth.users table and sends email verification
+      final signUpResponse = await _client.auth.signUp(
+        email: email,
+        password: password,
+        emailRedirectTo: null, // Can be set to a custom redirect URL if needed
+        data: {
+          'full_name': fullName,
+          'first_name': firstName,
+          'last_name': lastName,
+          'phone': phone,
+          'role': 'business_hub',
+        },
+      );
+
+      if (signUpResponse.user == null) {
+        throw Exception('Failed to create user account');
+      }
+
+      final userId = signUpResponse.user!.id;
+
+      // Step 3: Save user details in users table (connected via userId)
+      // The password is saved here as required by the schema
+      // This links the business hub to the users table via the id foreign key
+      await _client
+          .from('users')
+          .upsert({
+            'id': userId, // This is the connection point - same ID used everywhere
+            'full_name': fullName,
+            'phone': phone,
+            'role': 'business_hub',
+            'is_active': true,
+            'access_status': 'approved',
+            'email': email,
+            'password': password, // Password saved in users table
+          }, onConflict: 'id');
+
+      // Step 4: Create business hub record
+      // The id field uses the same userId, creating the foreign key relationship
+      // This connects business_hubs.id -> users.id
+      try {
+        final hubResponse = await _client
+            .from('business_hubs')
+            .insert({
+              'id': userId, // Foreign key to users.id - this is the connection
+              'name': name,
+              'bh_code': bhcode, // Generated unique code
+              'balance': 0.0,
+            })
+            .select()
+            .single();
+
+        // Verify the insert was successful
+        if (hubResponse == null || hubResponse['id'] == null) {
+          throw Exception('Business hub record was not created successfully');
+        }
+
+        // Verify the record actually exists in the database
+        final verifyHub = await _client
+            .from('business_hubs')
+            .select('id, name, bh_code')
+            .filter('id', 'eq', userId)
+            .maybeSingle();
+
+        if (verifyHub == null) {
+          throw Exception('Business hub record was inserted but could not be verified in database');
+        }
+
+        // Step 5: Return success with the generated code
+        return {
+          'success': true,
+          'user_id': userId,
+          'hub_id': hubResponse['id'],
+          'bhcode': bhcode, // Return the code for display after successful registration
+        };
+      } catch (insertError) {
+        // If insert fails, provide detailed error information
+        throw Exception('Failed to insert business hub record: $insertError. User ID: $userId, Name: $name, BHCODE: $bhcode');
+      }
+    } catch (e) {
+      // Re-throw with more context if it's not already a detailed error
+      if (e.toString().contains('Failed to insert business hub record')) {
+        rethrow;
+      }
+      throw Exception('Failed to create business hub: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> createLoadingStation({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String name,
+    required String password,
+    required String? bhcode,
+  }) async {
+    try {
+      // Step 0: Validate BHCODE if provided (for linking to business hub)
+      String? businessHubId;
+      if (bhcode != null && bhcode.isNotEmpty) {
+        final hub = await _client
+            .from('business_hubs')
+            .select('id')
+            .filter('bh_code', 'eq', bhcode)
+            .maybeSingle();
+        
+        if (hub == null) {
+          throw Exception('Invalid BHCODE. Business Hub not found.');
+        }
+        businessHubId = hub['id'] as String;
+      }
+
+      // Combine first and last name
+      final fullName = '$firstName $lastName'.trim();
+
+      // Step 1: Generate unique LSCODE first
+      final lscode = await _ensureUniqueLSCode();
+
+      // Step 2: Create user account in Supabase Auth
+      // This creates the user in auth.users table and sends email verification
+      final signUpResponse = await _client.auth.signUp(
+        email: email,
+        password: password,
+        emailRedirectTo: null, // Can be set to a custom redirect URL if needed
+        data: {
+          'full_name': fullName,
+          'first_name': firstName,
+          'last_name': lastName,
+          'phone': phone,
+          'role': 'loading_station',
+        },
+      );
+
+      if (signUpResponse.user == null) {
+        throw Exception('Failed to create user account');
+      }
+
+      final userId = signUpResponse.user!.id;
+
+      // Step 3: Save user details in users table (connected via userId)
+      // The password is saved here as required by the schema
+      // This links the loading station to the users table via the id foreign key
+      await _client
+          .from('users')
+          .upsert({
+            'id': userId, // This is the connection point - same ID used everywhere
+            'full_name': fullName,
+            'phone': phone,
+            'role': 'loading_station',
+            'is_active': true,
+            'access_status': 'approved',
+            'email': email,
+            'password': password, // Password saved in users table
+          }, onConflict: 'id');
+
+      // Step 4: Create loading station record
+      // The id field uses the same userId, creating the foreign key relationship
+      // This connects loading_stations.id -> users.id
+      try {
+        final stationResponse = await _client
+            .from('loading_stations')
+            .insert({
+              'id': userId, // Foreign key to users.id - this is the connection
+              'name': name,
+              'ls_code': lscode, // Generated unique code
+              'business_hub_id': businessHubId, // Optional link to business hub
+              'balance': 0.0,
+            })
+            .select()
+            .single();
+
+        // Verify the insert was successful
+        if (stationResponse == null || stationResponse['id'] == null) {
+          throw Exception('Loading station record was not created successfully');
+        }
+
+        // Step 5: Return success with the generated code
+        return {
+          'success': true,
+          'user_id': userId,
+          'station_id': stationResponse['id'],
+          'lscode': lscode, // Return the code for display after successful registration
+        };
+      } catch (insertError) {
+        // If insert fails, provide detailed error information
+        throw Exception('Failed to insert loading station record: $insertError. User ID: $userId, Name: $name, LSCODE: $lscode');
+      }
+    } catch (e) {
+      // Re-throw with more context if it's not already a detailed error
+      if (e.toString().contains('Failed to insert loading station record')) {
+        rethrow;
+      }
+      throw Exception('Failed to create loading station: $e');
+    }
+  }
+
+  Future<double?> getCommissionRate(String role) async {
+    try {
+      final response = await _client
+          .from('commission_settings')
+          .select('percentage')
+          .eq('role', role)
+          .maybeSingle();
+      
+      if (response == null) return null;
+      return (response['percentage'] as num?)?.toDouble();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Top-Up Request Management
+  Future<List<TopupRequestModel>> getTopupRequests({String? status}) async {
+    try {
+      final response = status != null
+          ? await _client
+              .from('topup_requests')
+              .select('''
+                *,
+                requester:users!topup_requests_requested_by_fkey(full_name),
+                business_hubs(name),
+                loading_stations(name)
+              ''')
+              .filter('status', 'eq', status)
+              .order('created_at', ascending: false)
+          : await _client
+              .from('topup_requests')
+              .select('''
+                *,
+                requester:users!topup_requests_requested_by_fkey(full_name),
+                business_hubs(name),
+                loading_stations(name)
+              ''')
+              .order('created_at', ascending: false);
+      
+      return (response as List).map((json) {
+        final requesterData = json['requester'];
+        final hubData = json['business_hubs'];
+        final stationData = json['loading_stations'];
+        
+        return TopupRequestModel.fromJson({
+          ...json,
+          'requester_name': requesterData?['full_name'],
+          'business_hub_name': hubData?['name'],
+          'loading_station_name': stationData?['name'],
+        });
+      }).toList();
+    } catch (e) {
+      // If table doesn't exist, return empty list instead of throwing
+      if (e.toString().contains('topup_requests') || e.toString().contains('PGRST205')) {
+        return [];
+      }
+      throw Exception('Failed to fetch top-up requests: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> approveTopupRequest(String requestId, String adminId) async {
+    try {
+      // Get the request
+      final request = await _client
+          .from('topup_requests')
+          .select()
+          .filter('id', 'eq', requestId)
+          .filter('status', 'eq', 'pending')
+          .maybeSingle();
+      
+      if (request == null) {
+        throw Exception('Top-up request not found or already processed');
+      }
+
+      final businessHubId = request['business_hub_id'] as String?;
+      final loadingStationId = request['loading_station_id'] as String?;
+      final requestedAmount = (request['requested_amount'] as num).toDouble();
+
+      // Determine role and get commission rate
+      String role;
+      if (businessHubId != null) {
+        role = 'business_hub';
+      } else if (loadingStationId != null) {
+        role = 'loading_station';
+      } else {
+        throw Exception('Invalid top-up request: no hub or station specified');
+      }
+
+      final commissionRate = await getCommissionRate(role);
+      if (commissionRate == null) {
+        throw Exception('Commission rate not found for $role');
+      }
+
+      // Calculate bonus and total
+      final bonusAmount = requestedAmount * (commissionRate / 100);
+      final totalCredited = requestedAmount + bonusAmount;
+
+      // Update request status
+      await _client
+          .from('topup_requests')
+          .update({
+            'status': 'approved',
+            'processed_at': DateTime.now().toIso8601String(),
+            'processed_by': adminId,
+            'bonus_rate': commissionRate,
+            'bonus_amount': bonusAmount,
+            'total_credited': totalCredited,
+          })
+          .filter('id', 'eq', requestId);
+
+      // Create topup record
+      final topupData = {
+        'initiated_by': request['requested_by'],
+        'amount': requestedAmount,
+        'bonus_amount': bonusAmount,
+        'total_credited': totalCredited,
+        if (businessHubId != null) 'business_hub_id': businessHubId,
+        if (loadingStationId != null) 'loading_station_id': loadingStationId,
+      };
+
+      await _client.from('topups').insert(topupData);
+
+      // Update balance - direct update approach
+      if (businessHubId != null) {
+        final hub = await _client
+            .from('business_hubs')
+            .select('balance')
+            .eq('id', businessHubId)
+            .single();
+        
+        final currentBalance = (hub['balance'] as num).toDouble();
+        await _client
+            .from('business_hubs')
+            .update({'balance': currentBalance + totalCredited})
+            .eq('id', businessHubId);
+      } else if (loadingStationId != null) {
+        final station = await _client
+            .from('loading_stations')
+            .select('balance')
+            .eq('id', loadingStationId)
+            .single();
+        
+        final currentBalance = (station['balance'] as num).toDouble();
+        await _client
+            .from('loading_stations')
+            .update({'balance': currentBalance + totalCredited})
+            .eq('id', loadingStationId);
+      }
+
+      return {
+        'success': true,
+        'request_id': requestId,
+        'amount': requestedAmount,
+        'bonus_amount': bonusAmount,
+        'total_credited': totalCredited,
+      };
+    } catch (e) {
+      throw Exception('Failed to approve top-up request: $e');
+    }
+  }
+
+  Future<bool> rejectTopupRequest(String requestId, String adminId, {String? reason}) async {
+    try {
+      await _client
+          .from('topup_requests')
+          .update({
+            'status': 'rejected',
+            'processed_at': DateTime.now().toIso8601String(),
+            'processed_by': adminId,
+            'rejection_reason': reason,
+          })
+          .filter('id', 'eq', requestId)
+          .filter('status', 'eq', 'pending');
+
+      return true;
+    } catch (e) {
+      // If table doesn't exist, return false gracefully
+      if (e.toString().contains('topup_requests') || e.toString().contains('PGRST205')) {
+        return false;
+      }
+      throw Exception('Failed to reject top-up request: $e');
     }
   }
 }
