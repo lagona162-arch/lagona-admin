@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'services/supabase_service.dart';
 import 'providers/admin_provider.dart';
+import 'providers/auth_provider.dart';
 import 'utils/app_colors.dart';
+import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/users_screen.dart';
 import 'screens/merchants_screen.dart';
@@ -57,6 +59,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => AdminProvider()),
       ],
       child: const LagonaAdminApp(),
@@ -64,77 +67,104 @@ void main() async {
   );
 }
 
-final GoRouter _router = GoRouter(
-  initialLocation: '/',
-  routes: [
-    ShellRoute(
-      builder: (context, state, child) {
-        return MainLayout(
-          currentPath: state.uri.path,
-          child: child,
-        );
-      },
-      routes: [
-        GoRoute(
-          path: '/',
-          name: 'dashboard',
-          builder: (context, state) => const DashboardScreen(),
-        ),
-        GoRoute(
-          path: '/users',
-          name: 'users',
-          builder: (context, state) => const UsersScreen(),
-        ),
-        GoRoute(
-          path: '/merchants',
-          name: 'merchants',
-          builder: (context, state) => const MerchantsScreen(),
-        ),
-        GoRoute(
-          path: '/merchant-applications',
-          name: 'merchant-applications',
-          builder: (context, state) => const ApplicationsScreen(),
-        ),
-        GoRoute(
-          path: '/riders',
-          name: 'riders',
-          builder: (context, state) => const RidersScreen(),
-        ),
-        GoRoute(
-          path: '/transactions',
-          name: 'transactions',
-          builder: (context, state) => const TransactionsScreen(),
-        ),
-        GoRoute(
-          path: '/deliveries',
-          name: 'deliveries',
-          builder: (context, state) => const DeliveriesScreen(),
-        ),
-        GoRoute(
-          path: '/commission-settings',
-          name: 'commission-settings',
-          builder: (context, state) => const CommissionSettingsScreen(),
-        ),
-        GoRoute(
-          path: '/topups',
-          name: 'topups',
-          builder: (context, state) => const TopupsScreen(),
-        ),
-        GoRoute(
-          path: '/hub-station-registration',
-          name: 'hub-station-registration',
-          builder: (context, state) => const HubStationRegistrationScreen(),
-        ),
-      ],
-    ),
-  ],
-);
+GoRouter _createRouter(AuthProvider authProvider) {
+  return GoRouter(
+    initialLocation: '/',
+    refreshListenable: authProvider,
+    redirect: (context, state) {
+      final isAuthenticated = authProvider.isAuthenticated;
+      final isLoginRoute = state.uri.path == '/login';
+
+      // If not authenticated and trying to access protected route, redirect to login
+      if (!isAuthenticated && !isLoginRoute) {
+        return '/login';
+      }
+
+      // If authenticated and trying to access login, redirect to dashboard
+      if (isAuthenticated && isLoginRoute) {
+        return '/';
+      }
+
+      return null; // No redirect needed
+    },
+    routes: [
+      GoRoute(
+        path: '/login',
+        name: 'login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      ShellRoute(
+        builder: (context, state, child) {
+          return MainLayout(
+            currentPath: state.uri.path,
+            child: child,
+          );
+        },
+        routes: [
+          GoRoute(
+            path: '/',
+            name: 'dashboard',
+            builder: (context, state) => const DashboardScreen(),
+          ),
+          GoRoute(
+            path: '/users',
+            name: 'users',
+            builder: (context, state) => const UsersScreen(),
+          ),
+          GoRoute(
+            path: '/merchants',
+            name: 'merchants',
+            builder: (context, state) => const MerchantsScreen(),
+          ),
+          GoRoute(
+            path: '/merchant-applications',
+            name: 'merchant-applications',
+            builder: (context, state) => const ApplicationsScreen(),
+          ),
+          GoRoute(
+            path: '/riders',
+            name: 'riders',
+            builder: (context, state) => const RidersScreen(),
+          ),
+          GoRoute(
+            path: '/transactions',
+            name: 'transactions',
+            builder: (context, state) => const TransactionsScreen(),
+          ),
+          GoRoute(
+            path: '/deliveries',
+            name: 'deliveries',
+            builder: (context, state) => const DeliveriesScreen(),
+          ),
+          GoRoute(
+            path: '/commission-settings',
+            name: 'commission-settings',
+            builder: (context, state) => const CommissionSettingsScreen(),
+          ),
+          GoRoute(
+            path: '/topups',
+            name: 'topups',
+            builder: (context, state) => const TopupsScreen(),
+          ),
+          GoRoute(
+            path: '/hub-station-registration',
+            name: 'hub-station-registration',
+            builder: (context, state) => const HubStationRegistrationScreen(),
+          ),
+        ],
+      ),
+    ],
+  );
+}
 
 class LagonaAdminApp extends StatelessWidget {
   const LagonaAdminApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final router = _createRouter(authProvider);
+
     return MaterialApp.router(
       title: 'Lagona Admin',
       debugShowCheckedModeBanner: false,
@@ -188,7 +218,7 @@ class LagonaAdminApp extends StatelessWidget {
           filled: true,
         ),
       ),
-      routerConfig: _router,
+      routerConfig: router,
     );
   }
 }
@@ -372,6 +402,36 @@ class _MainLayoutState extends State<MainLayout> {
                         
                         // Footer
                         Divider(color: AppColors.textWhite.withOpacity(0.24)),
+                        // Logout button
+                        InkWell(
+                          onTap: () async {
+                            final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                            await authProvider.signOut();
+                            if (context.mounted) {
+                              context.go('/login');
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.logout, color: AppColors.textWhite),
+                                if (_isDrawerExpanded) ...[
+                                  const SizedBox(width: 16),
+                                  const Expanded(
+                                    child: Text(
+                                      'Logout',
+                                      style: TextStyle(
+                                        color: AppColors.textWhite,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
                         Padding(
                           padding: const EdgeInsets.all(16),
                           child: _isDrawerExpanded
@@ -516,6 +576,33 @@ class _MainLayoutState extends State<MainLayout> {
               isMobile: true,
             ),
             Divider(color: AppColors.textWhite.withOpacity(0.24)),
+            // Logout button
+            InkWell(
+              onTap: () async {
+                final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                await authProvider.signOut();
+                if (context.mounted) {
+                  context.go('/login');
+                  Navigator.of(context).pop(); // Close drawer
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: const Row(
+                  children: [
+                    Icon(Icons.logout, color: AppColors.textWhite),
+                    SizedBox(width: 16),
+                    Text(
+                      'Logout',
+                      style: TextStyle(
+                        color: AppColors.textWhite,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.all(16),
               child: Text(

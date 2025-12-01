@@ -433,8 +433,8 @@ class AdminProvider extends ChangeNotifier {
     try {
       _setLoading(true);
       _setError(null);
-      // Get current admin user ID (you may need to adjust this based on your auth setup)
-      final adminId = 'admin'; // TODO: Replace with actual admin user ID
+      // Get current admin user ID
+      final adminId = await _adminService.getCurrentAdminId();
       await _adminService.approveTopupRequest(requestId, adminId);
       await loadTopupRequests(forceRefresh: true);
       await loadTopups(forceRefresh: true);
@@ -452,7 +452,8 @@ class AdminProvider extends ChangeNotifier {
     try {
       _setLoading(true);
       _setError(null);
-      final adminId = 'admin'; // TODO: Replace with actual admin user ID
+      // Get current admin user ID
+      final adminId = await _adminService.getCurrentAdminId();
       await _adminService.rejectTopupRequest(requestId, adminId, reason: reason);
       await loadTopupRequests(forceRefresh: true);
       _setLoading(false);

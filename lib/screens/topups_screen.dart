@@ -103,7 +103,7 @@ class _TopupsScreenState extends State<TopupsScreen> {
                   ],
                 ),
           const SizedBox(height: 24),
-
+          
           // View Type Selector
           Container(
             decoration: BoxDecoration(
@@ -156,9 +156,9 @@ class _TopupsScreenState extends State<TopupsScreen> {
           isMobile
               ? Column(
                   children: [
-                    TextField(
-                      decoration: const InputDecoration(
-                        labelText: 'Search',
+          TextField(
+            decoration: const InputDecoration(
+              labelText: 'Search',
                         hintText: 'Search by name or account',
                         prefixIcon: Icon(Icons.search),
                         border: OutlineInputBorder(),
@@ -204,14 +204,14 @@ class _TopupsScreenState extends State<TopupsScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Search',
                           hintText: 'Search by name or account',
-                          prefixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (value) {
-                          setState(() {
-                            _searchQuery = value.toLowerCase();
-                          });
-                        },
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value.toLowerCase();
+              });
+            },
                       ),
                     ),
                     if (_viewType == 'requests') ...[
@@ -243,7 +243,7 @@ class _TopupsScreenState extends State<TopupsScreen> {
                       ),
                     ],
                   ],
-                ),
+          ),
           const SizedBox(height: 24),
           
           // Data Table
@@ -482,10 +482,10 @@ class _TopupsScreenState extends State<TopupsScreen> {
   }
 
   Widget _buildCompletedTable(AdminProvider provider, NumberFormat currencyFormat) {
-    var filteredTopups = provider.topups.where((topup) {
-      final matchesSearch = topup.initiatorName?.toLowerCase().contains(_searchQuery) ?? false;
-      return matchesSearch;
-    }).toList();
+                var filteredTopups = provider.topups.where((topup) {
+                  final matchesSearch = topup.initiatorName?.toLowerCase().contains(_searchQuery) ?? false;
+                  return matchesSearch;
+                }).toList();
 
     if (filteredTopups.isEmpty) {
       return Center(
@@ -503,24 +503,24 @@ class _TopupsScreenState extends State<TopupsScreen> {
       );
     }
 
-    return Card(
-      elevation: 2,
-      child: DataTable2(
-        columnSpacing: 12,
-        horizontalMargin: 12,
-        minWidth: 900,
-        columns: const [
+                return Card(
+                  elevation: 2,
+                  child: DataTable2(
+                    columnSpacing: 12,
+                    horizontalMargin: 12,
+                    minWidth: 900,
+                    columns: const [
           DataColumn2(label: Text('Type'), size: ColumnSize.S),
-          DataColumn2(label: Text('Top-Up ID'), size: ColumnSize.M),
-          DataColumn2(label: Text('Initiated By'), size: ColumnSize.L),
-          DataColumn2(label: Text('Amount'), size: ColumnSize.S),
-          DataColumn2(label: Text('Bonus'), size: ColumnSize.S),
-          DataColumn2(label: Text('Total Credited'), size: ColumnSize.S),
-          DataColumn2(label: Text('Date'), size: ColumnSize.M),
-        ],
-        rows: filteredTopups.map((topup) {
-          return DataRow2(
-            cells: [
+                      DataColumn2(label: Text('Top-Up ID'), size: ColumnSize.M),
+                      DataColumn2(label: Text('Initiated By'), size: ColumnSize.L),
+                      DataColumn2(label: Text('Amount'), size: ColumnSize.S),
+                      DataColumn2(label: Text('Bonus'), size: ColumnSize.S),
+                      DataColumn2(label: Text('Total Credited'), size: ColumnSize.S),
+                      DataColumn2(label: Text('Date'), size: ColumnSize.M),
+                    ],
+                    rows: filteredTopups.map((topup) {
+                      return DataRow2(
+                        cells: [
               DataCell(Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -529,29 +529,29 @@ class _TopupsScreenState extends State<TopupsScreen> {
                   const Text('Completed'),
                 ],
               )),
-              DataCell(Text(topup.id.substring(0, 8))),
-              DataCell(Text(topup.initiatorName ?? 'N/A')),
-              DataCell(Text(currencyFormat.format(topup.amount))),
-              DataCell(Text(
-                currencyFormat.format(topup.bonusAmount),
-                style: TextStyle(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.bold,
-                ),
-              )),
-              DataCell(Text(
-                currencyFormat.format(topup.totalCredited),
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              )),
-              DataCell(Text(DateFormat('MMM d, y h:mm a').format(topup.createdAt))),
-            ],
-          );
-        }).toList(),
-      ),
-    );
+                          DataCell(Text(topup.id.substring(0, 8))),
+                          DataCell(Text(topup.initiatorName ?? 'N/A')),
+                          DataCell(Text(currencyFormat.format(topup.amount))),
+                          DataCell(Text(
+                            currencyFormat.format(topup.bonusAmount),
+                            style: TextStyle(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )),
+                          DataCell(Text(
+                            currencyFormat.format(topup.totalCredited),
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )),
+                          DataCell(Text(DateFormat('MMM d, y h:mm a').format(topup.createdAt))),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                );
   }
 
   Widget _buildStatusChip(String status) {
