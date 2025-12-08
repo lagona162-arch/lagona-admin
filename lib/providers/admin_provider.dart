@@ -320,6 +320,21 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> deleteCommissionSetting(String id) async {
+    try {
+      _setLoading(true);
+      _setError(null);
+      await _adminService.deleteCommissionSetting(id);
+      await loadCommissionSettings(forceRefresh: true);
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
   Future<bool> updateMerchantAccessStatus(String merchantId, String accessStatus) async {
     try {
       _setLoading(true);
@@ -429,13 +444,22 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> approveTopupRequest(String requestId) async {
+  Future<bool> approveTopupRequest(
+    String requestId, {
+    double? commissionRateOverride,
+    bool saveCommissionOverride = false,
+  }) async {
     try {
       _setLoading(true);
       _setError(null);
       // Get current admin user ID
       final adminId = await _adminService.getCurrentAdminId();
-      await _adminService.approveTopupRequest(requestId, adminId);
+      await _adminService.approveTopupRequest(
+        requestId,
+        adminId,
+        commissionRateOverride: commissionRateOverride,
+        saveCommissionOverride: saveCommissionOverride,
+      );
       await loadTopupRequests(forceRefresh: true);
       await loadTopups(forceRefresh: true);
       await loadCashFlowData(forceRefresh: true);
@@ -445,6 +469,18 @@ class AdminProvider extends ChangeNotifier {
       _setError(e.toString());
       _setLoading(false);
       return false;
+    }
+  }
+
+  Future<double?> getEntityCommissionRate(String role, {String? businessHubId, String? loadingStationId}) async {
+    try {
+      return await _adminService.getEntityCommissionRate(
+        role,
+        businessHubId: businessHubId,
+        loadingStationId: loadingStationId,
+      );
+    } catch (e) {
+      return null;
     }
   }
 

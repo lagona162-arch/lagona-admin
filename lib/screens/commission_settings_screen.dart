@@ -193,25 +193,51 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
               ),
             ),
             SizedBox(height: isMobile ? 6 : 4),
-            SizedBox(
-              width: isMobile ? 28.0 : 24.0,
-              height: isMobile ? 28.0 : 24.0,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: IconButton(
-              icon: Icon(
-                Icons.edit,
-                color: AppColors.primary,
-                size: isMobile ? 18.0 : 16.0,
-              ),
-              onPressed: () => _showEditCommissionDialog(setting),
-              tooltip: 'Edit',
-              padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(), // remove default 48x48 min size
-                  visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                  splashRadius: isMobile ? 14.0 : 12.0,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: isMobile ? 28.0 : 24.0,
+                  height: isMobile ? 28.0 : 24.0,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.edit,
+                        color: AppColors.primary,
+                        size: isMobile ? 18.0 : 16.0,
+                      ),
+                      onPressed: () => _showEditCommissionDialog(setting),
+                      tooltip: 'Edit',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                      splashRadius: isMobile ? 14.0 : 12.0,
+                    ),
+                  ),
                 ),
-              ),
+                SizedBox(width: isMobile ? 8 : 6),
+                SizedBox(
+                  width: isMobile ? 28.0 : 24.0,
+                  height: isMobile ? 28.0 : 24.0,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.delete,
+                        color: AppColors.error,
+                        size: isMobile ? 18.0 : 16.0,
+                      ),
+                      onPressed: () => _showDeleteCommissionDialog(setting),
+                      tooltip: 'Delete',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                      splashRadius: isMobile ? 14.0 : 12.0,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -273,6 +299,27 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
               ),
               keyboardType: TextInputType.number,
             ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'If a commission setting already exists for this role, it will be overwritten.',
+                      style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
         actions: [
@@ -294,7 +341,7 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
                     if (success) {
                       ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Commission setting created successfully'),
+                        content: Text('Commission setting saved successfully (existing setting overwritten if present)'),
                         backgroundColor: AppColors.success,
                       ),
                       );
@@ -390,6 +437,86 @@ class _CommissionSettingsScreenState extends State<CommissionSettingsScreen> {
               }
             },
             child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteCommissionDialog(setting) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: AppColors.error, size: 28),
+            SizedBox(width: 12),
+            Text('Delete Commission Setting'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Are you sure you want to delete this commission setting?'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Role: ${setting.role.replaceAll('_', ' ').toUpperCase()}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text('Commission Rate: ${setting.percentage.toStringAsFixed(2)}%'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'This action cannot be undone.',
+              style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () async {
+              Navigator.pop(context);
+              final success = await context.read<AdminProvider>().deleteCommissionSetting(setting.id);
+              if (mounted) {
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Commission setting deleted successfully'),
+                      backgroundColor: AppColors.success,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        context.read<AdminProvider>().error ?? 'Failed to delete commission setting',
+                      ),
+                      backgroundColor: AppColors.error,
+                      duration: const Duration(seconds: 4),
+                    ),
+                  );
+                }
+              }
+            },
+            icon: const Icon(Icons.delete),
+            label: const Text('Delete'),
           ),
         ],
       ),

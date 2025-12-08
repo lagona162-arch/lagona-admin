@@ -441,62 +441,217 @@ class _TopupRequestsScreenState extends State<TopupRequestsScreen> {
   }
 
   Future<void> _approveRequest(TopupRequestModel request) async {
-    final confirmed = await showDialog<bool>(
+    final provider = context.read<AdminProvider>();
+    
+    // Determine role and get current commission rate
+    String role;
+    String? entityId;
+    if (request.businessHubId != null) {
+      role = 'business_hub';
+      entityId = request.businessHubId;
+    } else if (request.loadingStationId != null) {
+      role = 'loading_station';
+      entityId = request.loadingStationId;
+    } else {
+      role = 'unknown';
+    }
+
+    // Load current commission rate for the role
+    final currentCommissionRate = await provider.getCommissionRate(role);
+    
+    // Initialize controllers
+    final commissionController = TextEditingController(
+      text: currentCommissionRate?.toStringAsFixed(2) ?? '0.00',
+    );
+    double commissionRate = currentCommissionRate ?? 0.0;
+    bool saveCommissionOverride = false;
+
+    final confirmed = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: AppColors.success, size: 28),
-            SizedBox(width: 12),
-            Text('Approve Top-Up Request'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Are you sure you want to approve this top-up request?'),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            // Calculate values based on current commission rate
+            // Formula: Bonus = Amount × (Commission Rate / 100)
+            // Total = Amount + Bonus
+            final bonusAmount = request.requestedAmount * (commissionRate / 100);
+            final totalCredited = request.requestedAmount + bonusAmount;
+
+            return AlertDialog(
+              title: const Row(
                 children: [
-                  Text('Requester: ${request.requesterName ?? "N/A"}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text('Amount: ₱${request.requestedAmount.toStringAsFixed(2)}'),
-                  if (request.businessHubName != null) Text('Business Hub: ${request.businessHubName}'),
-                  if (request.loadingStationName != null) Text('Loading Station: ${request.loadingStationName}'),
+                  Icon(Icons.check_circle, color: AppColors.success, size: 28),
+                  SizedBox(width: 12),
+                  Text('Approve Top-Up Request'),
                 ],
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'The account balance will be credited with the amount plus bonus.',
-              style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.check),
-            label: const Text('Approve'),
-          ),
-        ],
-      ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Review and approve this top-up request:'),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Requester: ${request.requesterName ?? "N/A"}', 
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          Text('Requested Amount: ₱${request.requestedAmount.toStringAsFixed(2)}'),
+                          if (request.businessHubName != null) ...[
+                            const SizedBox(height: 4),
+                            Text('Business Hub: ${request.businessHubName}'),
+                          ],
+                          if (request.loadingStationName != null) ...[
+                            const SizedBox(height: 4),
+                            Text('Loading Station: ${request.loadingStationName}'),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: commissionController,
+                      decoration: const InputDecoration(
+                        labelText: 'Commission Rate (%)',
+                        hintText: 'Enter commission rate',
+                        border: OutlineInputBorder(),
+                        suffixText: '%',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (value) {
+                        final parsed = double.tryParse(value);
+                        if (parsed != null && parsed >= 0 && parsed <= 100) {
+                          setState(() {
+                            commissionRate = parsed;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    if (entityId != null)
+                      CheckboxListTile(
+                        title: const Text('Save this commission rate for this ${role.replaceAll('_', ' ')}'),
+                        subtitle: Text(
+                          'Override existing commission setting${currentCommissionRate != null ? ' (Current: ${currentCommissionRate!.toStringAsFixed(2)}%)' : ''}',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                        value: saveCommissionOverride,
+                        onChanged: (value) {
+                          setState(() {
+                            saveCommissionOverride = value ?? false;
+                          });
+                        },
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.success.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Requested Amount:', style: TextStyle(fontWeight: FontWeight.bold)),
+                              Text(
+                                '₱${request.requestedAmount.toStringAsFixed(2)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Bonus (${commissionRate.toStringAsFixed(2)}%):', 
+                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text(
+                                '₱${bonusAmount.toStringAsFixed(2)}',
+                                style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '   = ₱${request.requestedAmount.toStringAsFixed(2)} × ${commissionRate.toStringAsFixed(2)}%',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                          ),
+                          const Divider(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Total to Credit:', 
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              Text(
+                                '₱${totalCredited.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: AppColors.success,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '   = ₱${request.requestedAmount.toStringAsFixed(2)} + ₱${bonusAmount.toStringAsFixed(2)}',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, null),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+                  onPressed: () {
+                    final finalRate = double.tryParse(commissionController.text);
+                    if (finalRate != null && finalRate >= 0 && finalRate <= 100) {
+                      Navigator.pop(context, {
+                        'commissionRate': finalRate,
+                        'saveOverride': saveCommissionOverride,
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.check),
+                  label: const Text('Approve'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
-    if (confirmed == true && mounted) {
-      final success = await context.read<AdminProvider>().approveTopupRequest(request.id);
+    if (confirmed != null && mounted) {
+      final finalCommissionRate = confirmed['commissionRate'] as double;
+      final saveOverride = confirmed['saveOverride'] as bool;
+      
+      final success = await provider.approveTopupRequest(
+        request.id,
+        commissionRateOverride: finalCommissionRate,
+        saveCommissionOverride: saveOverride,
+      );
+      
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -514,7 +669,7 @@ class _TopupRequestsScreenState extends State<TopupRequestsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              context.read<AdminProvider>().error ?? 'Failed to approve request',
+              provider.error ?? 'Failed to approve request',
             ),
             backgroundColor: AppColors.error,
             duration: const Duration(seconds: 4),

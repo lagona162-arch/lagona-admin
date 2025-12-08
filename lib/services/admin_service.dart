@@ -257,14 +257,41 @@ class AdminService {
 
   Future<void> createCommissionSetting(String role, double percentage) async {
     try {
-      await _client
+      // Check if a setting already exists for this role
+      final existing = await _client
           .from('commission_settings')
-          .insert({
-            'role': role,
-            'percentage': percentage,
-          });
+          .select('id')
+          .eq('role', role)
+          .maybeSingle();
+      
+      if (existing != null) {
+        // Update existing setting
+        await _client
+            .from('commission_settings')
+            .update({'percentage': percentage})
+            .eq('id', existing['id'] as String);
+      } else {
+        // Create new setting
+        await _client
+            .from('commission_settings')
+            .insert({
+              'role': role,
+              'percentage': percentage,
+            });
+      }
     } catch (e) {
       throw Exception('Failed to create commission setting: $e');
+    }
+  }
+
+  Future<void> deleteCommissionSetting(String id) async {
+    try {
+      await _client
+          .from('commission_settings')
+          .delete()
+          .eq('id', id);
+    } catch (e) {
+      throw Exception('Failed to delete commission setting: $e');
     }
   }
 
@@ -694,6 +721,7 @@ class AdminService {
     }
   }
 
+  /// Get the role-based commission rate
   Future<double?> getCommissionRate(String role) async {
     try {
       final response = await _client
@@ -702,11 +730,33 @@ class AdminService {
           .eq('role', role)
           .maybeSingle();
       
-      if (response == null) return null;
-      return (response['percentage'] as num?)?.toDouble();
+      if (response != null) {
+        return (response['percentage'] as num?)?.toDouble();
+      }
+      
+      return null;
     } catch (e) {
       return null;
     }
+  }
+
+  /// Get commission rate for a role (entity-specific overrides removed - just use role)
+  /// This method is kept for backward compatibility but now just calls getCommissionRate
+  Future<double?> getEntityCommissionRate(String role, {String? businessHubId, String? loadingStationId}) async {
+    // Entity-specific overrides removed - just return role-based rate
+    return await getCommissionRate(role);
+  }
+
+  /// Set commission rate for a role (entity-specific overrides removed)
+  /// This method is kept for backward compatibility but now just updates the role-based rate
+  Future<void> setEntityCommissionRate({
+    required String role,
+    required double percentage,
+    String? businessHubId,
+    String? loadingStationId,
+  }) async {
+    // Entity-specific overrides removed - just update the role-based rate
+    await createCommissionSetting(role, percentage);
   }
 
   // Top-Up Request Management
@@ -880,7 +930,12 @@ class AdminService {
     }
   }
 
-  Future<Map<String, dynamic>> approveTopupRequest(String requestId, String adminId) async {
+  Future<Map<String, dynamic>> approveTopupRequest(
+    String requestId,
+    String adminId, {
+    double? commissionRateOverride,
+    bool saveCommissionOverride = false,
+  }) async {
     try {
       // Get the request
       final request = await _client
@@ -900,6 +955,8 @@ class AdminService {
 
       // Determine role and get commission rate
       String role;
+      double commissionRate;
+      
       if (businessHubId != null) {
         role = 'business_hub';
       } else if (loadingStationId != null) {
@@ -908,12 +965,25 @@ class AdminService {
         throw Exception('Invalid top-up request: no hub or station specified');
       }
 
-      final commissionRate = await getCommissionRate(role);
-      if (commissionRate == null) {
-        throw Exception('Commission rate not found for $role');
+      // Get commission rate for the role
+      if (commissionRateOverride != null) {
+        commissionRate = commissionRateOverride;
+        
+        // Save the override as role-based commission setting if requested
+        if (saveCommissionOverride) {
+          await createCommissionSetting(role, commissionRate);
+        }
+      } else {
+        // Get role-based commission rate
+        final roleCommissionRate = await getCommissionRate(role);
+        if (roleCommissionRate == null) {
+          throw Exception('Commission rate not found for $role');
+        }
+        commissionRate = roleCommissionRate;
       }
 
       // Calculate bonus and total
+      // Formula: request amount + (request amount × commission rate / 100) = total credited
       final bonusAmount = requestedAmount * (commissionRate / 100);
       final totalCredited = requestedAmount + bonusAmount;
 
@@ -975,6 +1045,7 @@ class AdminService {
         'amount': requestedAmount,
         'bonus_amount': bonusAmount,
         'total_credited': totalCredited,
+        'commission_rate': commissionRate,
       };
     } catch (e) {
       throw Exception('Failed to approve top-up request: $e');

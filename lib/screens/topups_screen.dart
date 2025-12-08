@@ -127,7 +127,8 @@ class _TopupsScreenState extends State<TopupsScreen> {
             builder: (context, provider, child) {
               final allRequests = provider.topupRequests;
               final pending = allRequests.where((r) => r.status == 'pending').length;
-              final completed = provider.topups.length;
+              // Count approved top-up requests as completed
+              final completed = provider.topupRequests.where((r) => r.status == 'approved').length;
 
               return isMobile
                   ? Column(
@@ -482,12 +483,19 @@ class _TopupsScreenState extends State<TopupsScreen> {
   }
 
   Widget _buildCompletedTable(AdminProvider provider, NumberFormat currencyFormat) {
-                var filteredTopups = provider.topups.where((topup) {
-                  final matchesSearch = topup.initiatorName?.toLowerCase().contains(_searchQuery) ?? false;
-                  return matchesSearch;
-                }).toList();
+    // Filter approved top-up requests
+    var filteredRequests = provider.topupRequests.where((request) {
+      // Only show approved requests
+      if (request.status != 'approved') return false;
+      
+      // Apply search filter
+      final matchesSearch = (request.requesterName?.toLowerCase().contains(_searchQuery) ?? false) ||
+          (request.businessHubName?.toLowerCase().contains(_searchQuery) ?? false) ||
+          (request.loadingStationName?.toLowerCase().contains(_searchQuery) ?? false);
+      return matchesSearch;
+    }).toList();
 
-    if (filteredTopups.isEmpty) {
+    if (filteredRequests.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -503,55 +511,63 @@ class _TopupsScreenState extends State<TopupsScreen> {
       );
     }
 
-                return Card(
-                  elevation: 2,
-                  child: DataTable2(
-                    columnSpacing: 12,
-                    horizontalMargin: 12,
-                    minWidth: 900,
-                    columns: const [
+    return Card(
+      elevation: 2,
+      child: DataTable2(
+        columnSpacing: 12,
+        horizontalMargin: 12,
+        minWidth: 1200,
+        columns: const [
           DataColumn2(label: Text('Type'), size: ColumnSize.S),
-                      DataColumn2(label: Text('Top-Up ID'), size: ColumnSize.M),
-                      DataColumn2(label: Text('Initiated By'), size: ColumnSize.L),
-                      DataColumn2(label: Text('Amount'), size: ColumnSize.S),
-                      DataColumn2(label: Text('Bonus'), size: ColumnSize.S),
-                      DataColumn2(label: Text('Total Credited'), size: ColumnSize.S),
-                      DataColumn2(label: Text('Date'), size: ColumnSize.M),
-                    ],
-                    rows: filteredTopups.map((topup) {
-                      return DataRow2(
-                        cells: [
+          DataColumn2(label: Text('Requester'), size: ColumnSize.L),
+          DataColumn2(label: Text('Account'), size: ColumnSize.M),
+          DataColumn2(label: Text('Amount'), size: ColumnSize.S),
+          DataColumn2(label: Text('Bonus'), size: ColumnSize.S),
+          DataColumn2(label: Text('Total'), size: ColumnSize.S),
+          DataColumn2(label: Text('Status'), size: ColumnSize.S),
+          DataColumn2(label: Text('Date'), size: ColumnSize.M),
+        ],
+        rows: filteredRequests.map((request) {
+          return DataRow2(
+            cells: [
               DataCell(Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle, size: 16, color: AppColors.success),
+                  Icon(Icons.account_balance_wallet, size: 16, color: AppColors.primary),
                   const SizedBox(width: 4),
-                  const Text('Completed'),
+                  const Text('Request'),
                 ],
               )),
-                          DataCell(Text(topup.id.substring(0, 8))),
-                          DataCell(Text(topup.initiatorName ?? 'N/A')),
-                          DataCell(Text(currencyFormat.format(topup.amount))),
-                          DataCell(Text(
-                            currencyFormat.format(topup.bonusAmount),
-                            style: TextStyle(
-                              color: AppColors.success,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )),
-                          DataCell(Text(
-                            currencyFormat.format(topup.totalCredited),
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )),
-                          DataCell(Text(DateFormat('MMM d, y h:mm a').format(topup.createdAt))),
-                        ],
-                      );
-                    }).toList(),
-                  ),
-                );
+              DataCell(Text(request.requesterName ?? 'N/A')),
+              DataCell(Text(
+                request.businessHubName ?? request.loadingStationName ?? 'N/A',
+              )),
+              DataCell(Text(currencyFormat.format(request.requestedAmount))),
+              DataCell(Text(
+                request.bonusAmount != null
+                    ? currencyFormat.format(request.bonusAmount!)
+                    : 'N/A',
+                style: request.bonusAmount != null
+                    ? TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)
+                    : null,
+              )),
+              DataCell(Text(
+                request.totalCredited != null
+                    ? currencyFormat.format(request.totalCredited!)
+                    : 'N/A',
+                style: request.totalCredited != null
+                    ? TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)
+                    : null,
+              )),
+              DataCell(_buildStatusChip(request.status)),
+              DataCell(Text(DateFormat('MMM d, y h:mm a').format(
+                request.processedAt ?? request.createdAt
+              ))),
+            ],
+          );
+        }).toList(),
+      ),
+    );
   }
 
   Widget _buildStatusChip(String status) {
@@ -578,7 +594,7 @@ class _TopupsScreenState extends State<TopupsScreen> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
@@ -586,15 +602,20 @@ class _TopupsScreenState extends State<TopupsScreen> {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
         ],
@@ -603,62 +624,216 @@ class _TopupsScreenState extends State<TopupsScreen> {
   }
 
   Future<void> _approveRequest(TopupRequestModel request) async {
-    final confirmed = await showDialog<bool>(
+    final provider = context.read<AdminProvider>();
+    
+    // Determine role and get current commission rate
+    String role;
+    String? entityId;
+    if (request.businessHubId != null) {
+      role = 'business_hub';
+      entityId = request.businessHubId;
+    } else if (request.loadingStationId != null) {
+      role = 'loading_station';
+      entityId = request.loadingStationId;
+    } else {
+      role = 'unknown';
+    }
+
+    // Load current commission rate for the role
+    final currentCommissionRate = await provider.getCommissionRate(role);
+    
+    // Initialize controllers
+    final commissionController = TextEditingController(
+      text: currentCommissionRate?.toStringAsFixed(2) ?? '0.00',
+    );
+    double commissionRate = currentCommissionRate ?? 0.0;
+    bool saveCommissionOverride = false;
+
+    final confirmed = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: AppColors.success, size: 28),
-            SizedBox(width: 12),
-            Text('Approve Top-Up Request'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Are you sure you want to approve this top-up request?'),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            // Calculate values based on current commission rate
+            // Formula: Bonus = Amount × (Commission Rate / 100)
+            // Total = Amount + Bonus
+            final bonusAmount = request.requestedAmount * (commissionRate / 100);
+            final totalCredited = request.requestedAmount + bonusAmount;
+
+            return AlertDialog(
+              title: const Row(
                 children: [
-                  Text('Requester: ${request.requesterName ?? "N/A"}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text('Amount: ₱${request.requestedAmount.toStringAsFixed(2)}'),
-                  if (request.businessHubName != null) Text('Business Hub: ${request.businessHubName}'),
-                  if (request.loadingStationName != null) Text('Loading Station: ${request.loadingStationName}'),
+                  Icon(Icons.check_circle, color: AppColors.success, size: 28),
+                  SizedBox(width: 12),
+                  Text('Approve Top-Up Request'),
                 ],
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'The account balance will be credited with the amount plus bonus.',
-              style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.check),
-            label: const Text('Approve'),
-          ),
-        ],
-      ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Review and approve this top-up request:'),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Requester: ${request.requesterName ?? "N/A"}', 
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          Text('Requested Amount: ₱${request.requestedAmount.toStringAsFixed(2)}'),
+                          if (request.businessHubName != null) ...[
+                            const SizedBox(height: 4),
+                            Text('Business Hub: ${request.businessHubName}'),
+                          ],
+                          if (request.loadingStationName != null) ...[
+                            const SizedBox(height: 4),
+                            Text('Loading Station: ${request.loadingStationName}'),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: commissionController,
+                      decoration: const InputDecoration(
+                        labelText: 'Commission Rate (%)',
+                        hintText: 'Enter commission rate',
+                        border: OutlineInputBorder(),
+                        suffixText: '%',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (value) {
+                        final parsed = double.tryParse(value);
+                        if (parsed != null && parsed >= 0 && parsed <= 100) {
+                          setState(() {
+                            commissionRate = parsed;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    if (entityId != null)
+                      CheckboxListTile(
+                        title: Text('Save this commission rate for this ${role.replaceAll('_', ' ')}'),
+                        subtitle: Text(
+                          'Override existing commission setting${currentCommissionRate != null ? ' (Current: ${currentCommissionRate!.toStringAsFixed(2)}%)' : ''}',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                        value: saveCommissionOverride,
+                        onChanged: (value) {
+                          setState(() {
+                            saveCommissionOverride = value ?? false;
+                          });
+                        },
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.success.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Requested Amount:', style: TextStyle(fontWeight: FontWeight.bold)),
+                              Text(
+                                '₱${request.requestedAmount.toStringAsFixed(2)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Bonus (${commissionRate.toStringAsFixed(2)}%):', 
+                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text(
+                                '₱${bonusAmount.toStringAsFixed(2)}',
+                                style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '   = ₱${request.requestedAmount.toStringAsFixed(2)} × ${commissionRate.toStringAsFixed(2)}%',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                          ),
+                          const Divider(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Total to Credit:', 
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              Text(
+                                '₱${totalCredited.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: AppColors.success,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '   = ₱${request.requestedAmount.toStringAsFixed(2)} + ₱${bonusAmount.toStringAsFixed(2)}',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, null),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+                  onPressed: () {
+                    final finalRate = double.tryParse(commissionController.text);
+                    if (finalRate != null && finalRate >= 0 && finalRate <= 100) {
+                      Navigator.pop(context, {
+                        'commissionRate': finalRate,
+                        'saveOverride': saveCommissionOverride,
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.check),
+                  label: const Text('Approve'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
-    if (confirmed == true && mounted) {
-      final success = await context.read<AdminProvider>().approveTopupRequest(request.id);
+    if (confirmed != null && mounted) {
+      final finalCommissionRate = confirmed['commissionRate'] as double;
+      final saveOverride = confirmed['saveOverride'] as bool;
+      
+      final success = await provider.approveTopupRequest(
+        request.id,
+        commissionRateOverride: finalCommissionRate,
+        saveCommissionOverride: saveOverride,
+      );
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
