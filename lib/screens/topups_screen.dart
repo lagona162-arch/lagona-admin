@@ -41,7 +41,6 @@ class _TopupsScreenState extends State<TopupsScreen> {
         // Try to load requests, but don't fail if table doesn't exist
         context.read<AdminProvider>().loadTopupRequests(forceRefresh: true).catchError((e) {
           // Silently handle missing table
-          debugPrint('Top-up requests table not available: $e');
         });
       }
     });

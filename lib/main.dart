@@ -27,7 +27,6 @@ void main() async {
     FlutterError.dumpErrorToConsole(details);
   };
   ui.PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-    debugPrint('Uncaught zone error: $error');
     return true; // prevent default crashing behavior
   };
   ErrorWidget.builder = (FlutterErrorDetails details) {
@@ -53,7 +52,7 @@ void main() async {
   try {
     await SupabaseService.initialize();
   } catch (e) {
-    debugPrint('Error initializing Supabase: $e');
+    // Error initializing Supabase
   }
   
   runApp(

@@ -21,8 +21,6 @@ class AuthProvider extends ChangeNotifier {
       final AuthChangeEvent event = data.event;
       final Session? session = data.session;
       
-      print('Auth state changed: $event');
-      
       if (event == AuthChangeEvent.signedIn && session != null) {
         _currentUser = session.user;
         _error = null;
@@ -82,10 +80,6 @@ class AuthProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      print('Starting admin registration...');
-      print('Email: $email');
-      print('Name: $firstName $lastName');
-
       // Register admin account
       final result = await _adminService.registerAdminAccount(
         firstName: firstName,
@@ -94,8 +88,6 @@ class AuthProvider extends ChangeNotifier {
         phone: phone,
         password: password,
       );
-
-      print('Registration successful: ${result['user_id']}');
 
       // Try to sign in after registration
       // If email confirmation is required, we'll handle it gracefully
@@ -112,7 +104,6 @@ class AuthProvider extends ChangeNotifier {
         rethrow;
       }
     } catch (e) {
-      print('Registration error: $e');
       _error = e.toString().replaceAll('Exception: ', '');
       _isLoading = false;
       notifyListeners();
@@ -129,8 +120,6 @@ class AuthProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      print('Attempting to sign in: $email');
-
       // Sign in with Supabase Auth
       final response = await _client.auth.signInWithPassword(
         email: email,
@@ -141,8 +130,6 @@ class AuthProvider extends ChangeNotifier {
         throw Exception('Sign in failed: No user returned');
       }
 
-      print('Sign in successful: ${response.user!.id}');
-
       // Verify user is an admin
       try {
         final userData = await _client
@@ -152,23 +139,18 @@ class AuthProvider extends ChangeNotifier {
             .maybeSingle();
 
         if (userData != null && userData['role'] != 'admin') {
-          print('User is not an admin, signing out...');
           await signOut();
           throw Exception('Access denied. Admin privileges required.');
         }
       } catch (e) {
         // If query fails, don't block login - user was authenticated by Supabase
-        print('Warning: Could not verify admin role: $e');
       }
 
       _currentUser = response.user;
       _isLoading = false;
       _error = null; // Clear any previous errors
       notifyListeners();
-
-      print('Auth state updated, user: ${_currentUser?.id}');
     } catch (e) {
-      print('Sign in error: $e');
       final errorString = e.toString();
       
       // Check if it's an email confirmation error

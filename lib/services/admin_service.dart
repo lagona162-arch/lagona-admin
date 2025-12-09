@@ -808,8 +808,6 @@ class AdminService {
             // User record still not found, but user is authenticated
             // This shouldn't happen, but if it does, log a warning and allow it
             // The user was authenticated by Supabase Auth, so trust that
-            print('WARNING: User record not found in users table for authenticated user $userId');
-            print('Allowing access as user was authenticated by Supabase Auth');
             return userId;
           }
         }
@@ -819,8 +817,6 @@ class AdminService {
         if (e.toString().contains('Access denied')) {
           rethrow; // Re-throw access denied errors
         }
-        print('Warning: Could not verify admin role in users table: $e');
-        print('Allowing access as user was authenticated by Supabase Auth');
         return userId;
       }
     } catch (e) {
